@@ -1,4 +1,4 @@
-## Mocks and Fakes
+## Testing Payment APIs
 
  In testing, both mocks and fakes are used to replace real implementations of dependencies, but they serve
  different purposes and are used in different contexts.
