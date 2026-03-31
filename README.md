@@ -14,7 +14,9 @@
 
 ## Invoking the real Braintree Http API
 
-Normally you'd write a test like this, and it would be quite slow as it used a real network request
+Normally you'd write a test like this, and it provides a level of confidence that the Braintree Http API is working as expected. 
+
+The downside is that it would be quite slow as it used a real network request.
 
 ```php
 #[Test]
@@ -130,4 +132,5 @@ public function will_swap_the_default_implementation(): void
 }
 ```
 
+You can find the full code for this example in the [`tests`](tests/Feature/PaymentControllerTest.php) directory.
 
