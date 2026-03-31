@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use Domain\Payments\Braintree\BraintreeService;
+use Domain\Payments\Braintree\HttpBraintreeGateway;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -11,7 +13,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->instance(BraintreeService::class, new HttpBraintreeGateway);
     }
 
     /**
