@@ -1,58 +1,133 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+## Mocks and Fakes
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+ In testing, both mocks and fakes are used to replace real implementations of dependencies, but they serve
+ different purposes and are used in different contexts.
 
-## About Laravel
+ Mock: A mock is an object that is used to verify that certain interactions occur.
+ It is typically used to check that a method is called with specific parameters. Mocks are often used in unit
+ tests to ensure that the code under test interacts correctly with its dependencies.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+ Fake: A fake is a simpler implementation of a dependency that is used to make the test run faster or more reliably.
+ Fakes are often used in integration tests to replace complex or slow dependencies with simpler versions that
+ behave in a predictable way.
+ 
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Invoking the real Braintree Http API
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+Normally you'd write a test like this, and it would be quite slow as it used a real network request
 
-## Learning Laravel
+```php
+#[Test]
+public function can_create_payment(): void
+{
+    $response = $this->json('POST', '/api/payments', [
+        'order_id' => 12345,
+        'payment_method_token' => 'tok_visa',
+    ]);
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
-
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
-
-```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+    $response->assertStatus(200);
+}
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+## Creating a mock for the Braintree Http API
 
-## Contributing
+The next step is to create a mock for the Braintree Http API.
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+A Mock is an example of a test double.
 
-## Code of Conduct
+This test has some downsides. Mocked tests can be hard to refactor.
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+They can be fragile, as they are tightly coupled to the implementation of the class they are testing.
 
-## Security Vulnerabilities
+```php
+#[Test]
+public function can_create_a_payment_via_mock(): void
+{
+    // You'd probably have a binding in your AppServiceProvider like this:
+    // App\Providers\AppServiceProvider::register()
+    $this->app->instance(BraintreeService::class, new HttpBraintreeGateway);
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+    $this->mock(BraintreeService::class)
+        ->expects('createPayment')
+        ->with([
+            'order_id' => 12345,
+            'payment_method_token' => 'tok_visa',
+        ]);
 
-## License
+    $response = $this->json('POST', '/api/payments', [
+        'order_id' => 12345,
+        'payment_method_token' => 'tok_visa',
+    ]);
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+    $response->assertStatus(200);
+}
+```
+
+## Using a fake object for the Braintree Http API
+
+We can use a fake object to replace the real Braintree Http API at runtime.
+
+While this fake takes a bit more work to set up, the effort is probably worth it in the long run.
+
+Having a `assertPaymentReceived` method on the fake object allows us to verify that the payment was received.
+
+```php
+#[Test]
+public function it_creates_a_payment_using_a_fake_object(): void
+{
+    $inMemoryService = new InMemoryBraintreeGateway;
+    $this->app->instance(BraintreeService::class, $inMemoryService);
+
+    $response = $this->json('POST', '/api/payments', [
+        'order_id' => 12345,
+        'payment_method_token' => 'tok_visa',
+    ]);
+
+    $response->assertStatus(200);
+
+    $inMemoryService->assertPaymentReceived([
+        'order_id' => 12345,
+        'payment_method_token' => 'tok_visa',
+    ]);
+}
+```
+
+## Using a Fake Facade for a little more laravel magic
+
+```php
+#[Test]
+public function it_creates_a_payment_via_fake_object_with_more_elegance(): void
+{
+    $inMemoryService = HttpBraintreeGateway::fake();
+
+    $response = $this->json('POST', '/api/payments', [
+        'order_id' => 12345,
+        'payment_method_token' => 'tok_visa',
+    ]);
+
+    $response->assertStatus(200);
+
+    $inMemoryService->assertPaymentReceived([
+        'order_id' => 12345,
+        'payment_method_token' => 'tok_visa',
+    ]);
+}
+```
+
+We can add a couple more assertions to ensure the bindings work as expected.
+
+```php
+#[Test]
+public function ensure_braintree_service_has_correct_default_implementation(): void
+{
+    $this->assertInstanceOf(HttpBraintreeGateway::class, $this->app->make(HttpBraintreeGateway::class));
+}
+
+#[Test]
+public function will_swap_the_default_implementation(): void
+{
+    $this->assertInstanceOf(InMemoryBraintreeGateway::class, HttpBraintreeGateway::fake());
+}
+```
+
+
